@@ -24,7 +24,7 @@ class Login_handler:
             return {"user":False,"password":False}
         if not sha256.verify(self.password, user_details["password"]):
             return {"user":True,"password":False}
-        return {"user":True,"password":True}
+        return {"user":True,"password":True,"uuid":user_details["uuid"]}
 
     
 

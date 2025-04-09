@@ -9,6 +9,17 @@ from tensorflow.keras.preprocessing.image import load_img, img_to_array
 from lib.model_handler.prediction_handler import PredictionHandler
 import requests
 from geopy.distance import geodesic
+import random
+import smtplib
+from email.mime.text import MIMEText
+from email.mime.multipart import MIMEMultipart
+import os
+
+SENDER_EMAIL = os.getenv("EMAIL_USER")
+SENDER_PASSWORD = os.getenv("EMAIL_PASS")
+otp_store = {}
+def generate_otp():
+    return str(random.randint(100000, 999999)) 
 api_bp = Blueprint('api',__name__)
 
 MODEL_PATH = "./lib/model/trained_model.keras"
@@ -19,6 +30,26 @@ CLASS_LABELS = ["cataract", "diabetic_retinopathy", "glaucoma", "hypertensive_re
 def index():
     return 'Hello World'
 
+def send_email(to_email, subject, message):
+    try:
+        msg = MIMEMultipart()
+        msg['From'] = SENDER_EMAIL
+        msg['To'] = to_email
+        msg['Subject'] = subject
+
+        msg.attach(MIMEText(message, 'plain'))
+        server = smtplib.SMTP('smtp.gmail.com', 587)
+        server.starttls()
+        server.login(SENDER_EMAIL, SENDER_PASSWORD)
+        text = msg.as_string()
+        server.sendmail(SENDER_EMAIL, to_email, text)
+        server.quit()
+        return True
+
+    except Exception as e:
+        print("Error sending email:", e)
+        return False
+    
 @api_bp.route('/user-signin',methods=['POST','GET'])
 def user_signin():
     try:
@@ -32,22 +63,90 @@ def user_signin():
     except Exception as e:
         return {"success":False},400
     
-@api_bp.route('/user-login',methods=['POST','GET'])
+@api_bp.route('/user-login', methods=['POST'])
 def user_login():
     try:
-        email = request.args.get('email')
-        password = request.args.get('password')
-        login = Login_handler(email,password).login()
+        data = request.json
+        email = data.get('email')
+        password = data.get('password')
+
+        if not email or not password:
+            return jsonify({'error': 'Email and password are required'}), 400
+
+        login = Login_handler(email, password).login()
+
         if login['user'] and login['password']:
-            return jsonify({'user_can_login':True,'is_user_valid':True,'is_valid_password':True},200)
-        else:
-            if not login['user']:
-                return jsonify({'user_can_login':False,'is_user_valid':False,'is_valid_password':False},200)
+            uuid = login['uuid']  
+
+            otp = generate_otp()
+            otp_store[uuid] = otp  
+            breakpoint()
+            if send_email(email, "Your OTP Code", f"Your OTP is: {otp}"):
+                return jsonify({
+                    'uuid': uuid,
+                    'user_can_login': True,
+                    'is_user_valid': True,
+                    'is_valid_password': True,
+                    'otp_sent': True,
+                    'message': "OTP sent to your registered email"
+                }), 200
             else:
-                return jsonify({'user_can_login':True,'is_user_valid':True,'is_valid_password':False},200)
+                return jsonify({
+                    'uuid': uuid,
+                    'user_can_login': True,
+                    'is_user_valid': True,
+                    'is_valid_password': True,
+                    'otp_sent': False,
+                    'message': "Failed to send OTP"
+                }), 500
+
+        elif not login['user']:
+            return jsonify({
+                'user_can_login': False,
+                'is_user_valid': False,
+                'is_valid_password': False
+            }), 200
+
+        else:
+            return jsonify({
+                'user_can_login': True,
+                'is_user_valid': True,
+                'is_valid_password': False
+            }), 200
+
     except Exception as e:
-        return {"success":False},400
-    
+        print("Exception during login:", e)
+        return jsonify({"success": False, "error": str(e)}), 400
+@api_bp.route('/verify-otp', methods=['POST'])
+def verify_otp():
+    try:
+        data = request.json
+        uuid = data.get('uuid')
+        otp_input = data.get('otp')
+
+        if not uuid or not otp_input:
+            return jsonify({"error": "UUID and OTP are required"}), 400
+
+        stored_otp = otp_store.get(uuid)
+
+        if stored_otp == otp_input:
+            del otp_store[uuid]  # Remove OTP after successful verification
+            return jsonify({
+                "authenticated": True,
+                "message": "OTP verified successfully"
+            }), 200
+        else:
+            return jsonify({
+                "authenticated": False,
+                "message": "Invalid or expired OTP"
+            }), 401
+
+    except Exception as e:
+        print("Exception during OTP verification:", e)
+        return jsonify({"success": False, "error": str(e)}), 400
+
+
+
 
 @api_bp.route('/register-patient', methods=['POST'])
 def register_patient():
@@ -143,8 +242,9 @@ def get_nearest_specialists():
     try:
         user_lat = float(request.args.get("lat"))
         user_lng = float(request.args.get("lng"))
+        speciality = request.args.get("speciality")
         user_location = (user_lat, user_lng)
-        doctors = list(mongo.db.doctordata.find({}, {"_id": 0}))
+        doctors = list(mongo.db.doctordata.find({"specialization": speciality}, {"_id": 0}))
         for doctor in doctors:
             doctor["distance_km"] = round(geodesic(user_location, (doctor["lat"], doctor["lng"])).km, 2)
         doctors.sort(key=lambda x: x["distance_km"])

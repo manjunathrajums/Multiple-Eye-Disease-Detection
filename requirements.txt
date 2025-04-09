@@ -15,4 +15,4 @@ fpdf
 reportlab
 tensorflow
 requests
-geopy
+geopy              

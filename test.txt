@@ -1,0 +1,28 @@
+Sign in 
+curl -X POST "http://localhost:5000/user-signin?email=manjunath@gmail.com&password=7975742220"
+
+Login 
+curl -X POST "http://localhost:5000/user-login?email=manjunath@gmail.com&password=7975742220"
+
+verify-otp
+curl -X POST http://localhost:5000/verify-otp \
+-H "Content-Type: application/json" \
+-d '{
+  "uuid": "user-uuid-from-login-response",
+  "otp": "483920"
+}'
+
+Register 
+curl -X POST "http://localhost:5000/register-patient" -H "Content-Type: application/x-www-form-urlencoded" -d "uuid=8c5480a1-6584-4118-8c39-c8b5163e2bf7&name=Manjunath&age=21&gender=Male&email=manjunath@gmail.com&phone=7975742220&address=Somewhere"
+
+Predict
+curl -X POST "http://localhost:5000/predict" -H "Content-Type: multipart/form-data" -F "file=@C:\Manjunath\FYP\one_model\split\test\cataract\2074_right.jpg" -F "uuid=8c5480a1-6584-4118-8c39-c8b5163e2bf7"  
+
+Patient history
+curl -X GET "http://localhost:5000/prediction-history?uuid=8c5480a1-6584-4118-8c39-c8b5163e2bf7"
+
+Doctor near Me 
+curl -X GET "http://localhost:5000/nearest_eye_specialists?lat=12.9716&lng=77.5946&speciality=Retina%20Specialist"
+
+Report Generation
+http://localhost:5000/report?uuid=8c5480a1-6584-4118-8c39-c8b5163e2bf7&disease=Cataract
