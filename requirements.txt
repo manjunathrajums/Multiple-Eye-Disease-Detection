@@ -16,3 +16,4 @@ reportlab
 tensorflow
 requests
 geopy              
+flask_cors

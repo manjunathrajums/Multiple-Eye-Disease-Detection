@@ -50,16 +50,26 @@ def send_email(to_email, subject, message):
         print("Error sending email:", e)
         return False
     
-@api_bp.route('/user-signin',methods=['POST','GET'])
-def user_signin():
+@api_bp.route('/user-signup',methods=['POST','GET'])
+def user_signup():
     try:
         email = request.args.get('email')   
         password = request.args.get('password')
         data = mongo.db.logindata.find_one({"email":email})
         if data:
             return jsonify({"error": "Email already registered"}), 400
-        sign = Login_handler(email,password).signup()
-        return jsonify({"success":True},200)
+        otp = generate_otp()
+        otp_store["email"] = otp  
+        if send_email(email, "Your OTP Code", f"Your OTP is: {otp}"):
+            return jsonify({
+                'otp_sent': True,
+                'message': "OTP sent to your registered email"
+            }), 200
+        else:
+            return jsonify({
+                'otp_sent': False,
+                'message': "Didn’t receive the OTP? Check your spam folder or try a different email."
+            }), 500
     except Exception as e:
         return {"success":False},400
     
@@ -76,43 +86,26 @@ def user_login():
         login = Login_handler(email, password).login()
 
         if login['user'] and login['password']:
-            uuid = login['uuid']  
-
-            otp = generate_otp()
-            otp_store[uuid] = otp  
-            breakpoint()
-            if send_email(email, "Your OTP Code", f"Your OTP is: {otp}"):
-                return jsonify({
-                    'uuid': uuid,
-                    'user_can_login': True,
-                    'is_user_valid': True,
-                    'is_valid_password': True,
-                    'otp_sent': True,
-                    'message': "OTP sent to your registered email"
-                }), 200
-            else:
-                return jsonify({
-                    'uuid': uuid,
-                    'user_can_login': True,
-                    'is_user_valid': True,
-                    'is_valid_password': True,
-                    'otp_sent': False,
-                    'message': "Failed to send OTP"
-                }), 500
-
+            return jsonify({
+                'uuid':login['uuid'],
+                'authenticated': True,
+                'message': "Login successful"
+            }), 200
         elif not login['user']:
             return jsonify({
-                'user_can_login': False,
-                'is_user_valid': False,
-                'is_valid_password': False
-            }), 200
-
+                'authenticated': False,
+                'message': "User not found"
+            }), 401
+        elif not login['password']:
+            return jsonify({
+                'authenticated': False,
+                'message': "Incorrect password"
+            }), 401
         else:
             return jsonify({
-                'user_can_login': True,
-                'is_user_valid': True,
-                'is_valid_password': False
-            }), 200
+                'authenticated': False,
+                'message': "Invalid credentials"
+            }), 401
 
     except Exception as e:
         print("Exception during login:", e)
@@ -121,7 +114,7 @@ def user_login():
 def verify_otp():
     try:
         data = request.json
-        uuid = data.get('uuid')
+        uuid = data.get('email')
         otp_input = data.get('otp')
 
         if not uuid or not otp_input:
@@ -130,8 +123,10 @@ def verify_otp():
         stored_otp = otp_store.get(uuid)
 
         if stored_otp == otp_input:
+            sign = Login_handler(data['email'],data['password']).signup()
             del otp_store[uuid]  # Remove OTP after successful verification
             return jsonify({
+                "uuid":sign,
                 "authenticated": True,
                 "message": "OTP verified successfully"
             }), 200
@@ -144,8 +139,6 @@ def verify_otp():
     except Exception as e:
         print("Exception during OTP verification:", e)
         return jsonify({"success": False, "error": str(e)}), 400
-
-
 
 
 @api_bp.route('/register-patient', methods=['POST'])

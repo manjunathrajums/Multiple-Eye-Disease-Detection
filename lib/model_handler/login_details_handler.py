@@ -16,7 +16,7 @@ class Login_handler:
         user_uuid = str(uuid.uuid4())
         user_details['uuid'] = user_uuid
         mongo.db.logindata.insert_one(user_details)
-        return True
+        return user_uuid
     
     def login(self):
         user_details = mongo.db.logindata.find_one({"email":self.email})
